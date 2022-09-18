@@ -43,22 +43,24 @@ else:
 
 # Keep the supported currencies loaded in RAM so no time is wasted fetching
 # currencies.json from disk when an announcement is made
-logger.debug("Starting get_all_currencies")
+logger.info("Starting get_all_currencies")
 supported_currencies = get_all_currencies(single=True)
-logger.debug("Finished get_all_currencies")
+logger.info("Finished get_all_currencies")
 
 logger.info("new-coin-bot online", extra={"TELEGRAM": "STARTUP"})
 
 
 def buy():
+
     while not globals.stop_threads:
-        logger.debug("Waiting for buy_ready event")
+        print('33333')
+        logger.info("Waiting for buy_ready event")
         globals.buy_ready.wait()
-        logger.debug("buy_ready event triggered")
+        logger.info("buy_ready event triggered")
         if globals.stop_threads:
             break
         announcement_coin = globals.latest_listing
-
+        logger.info(announcement_coin)
         global supported_currencies
         if (
             announcement_coin
@@ -68,7 +70,6 @@ def buy():
         ):
 
             logger.info(f"New announcement detected: {announcement_coin}", extra={"TELEGRAM": "COIN_ANNOUNCEMENT"})
-
             if not supported_currencies:
                 supported_currencies = get_all_currencies(single=True)
             if supported_currencies:

@@ -9,6 +9,9 @@ import time
 import requests
 from gate_api import ApiClient
 from gate_api import SpotApi
+from bs4 import BeautifulSoup
+
+
 
 import gateio_new_coins_announcements_bot.globals as globals
 from gateio_new_coins_announcements_bot.auth.gateio_auth import load_gateio_creds
@@ -25,6 +28,8 @@ supported_currencies = None
 previously_found_coins = set()
 
 
+
+
 def get_announcement():
     """
     Retrieves new coin listing announcements
@@ -32,39 +37,60 @@ def get_announcement():
     """
     logger.debug("Pulling announcement page")
     # Generate random query/params to help prevent caching
-    rand_page_size = random.randint(1, 200)
-    letters = string.ascii_letters
-    random_string = "".join(random.choice(letters) for i in range(random.randint(10, 20)))
-    random_number = random.randint(1, 99999999999999999999)
-    queries = [
-        "type=1",
-        "catalogId=48",
-        "pageNo=1",
-        f"pageSize={str(rand_page_size)}",
-        f"rnd={str(time.time())}",
-        f"{random_string}={str(random_number)}",
-    ]
-    random.shuffle(queries)
-    logger.debug(f"Queries: {queries}")
-    request_url = (
-        f"https://www.binance.com/gateway-api/v1/public/cms/article/list/query"
-        f"?{queries[0]}&{queries[1]}&{queries[2]}&{queries[3]}&{queries[4]}&{queries[5]}"
-    )
+    # rand_page_size = random.randint(1, 200)
+    # letters = string.ascii_letters
+    # random_string = "".join(random.choice(letters) for i in range(random.randint(10, 20)))
+    # random_number = random.randint(1, 99999999999999999999)
+    # queries = [
+    #     "type=1",
+    #     "data-cate=newlisted",
+    #     "pageNo=1",
+    #     f"pageSize={str(rand_page_size)}",
+    #     f"rnd={str(time.time())}",
+    #     f"{random_string}={str(random_number)}",
+    # ]
+    # random.shuffle(queries)
+    # logger.debug(f"Queries: {queries}")
+    # request_url = (
+    #     f"https://www.binance.com/gateway-api/v1/public/cms/article/list/query"
+    #     f"?{queries[0]}&{queries[1]}&{queries[2]}&{queries[3]}&{queries[4]}&{queries[5]}"
+    # )
 
-    latest_announcement = requests.get(request_url)
-    if latest_announcement.status_code == 200:
+    # request_url = (
+    #     f"https://www.gate.io/zh-tw/articlelist/ann?"
+    #     f"?{queries[0]}&{queries[1]}&{queries[2]}&{queries[3]}&{queries[4]}&{queries[5]}"
+    # )
+    # print(request_url)
+
+
+    url = 'https://www.gate.io/articlelist/ann/0'
+    response = requests.get(url)
+    html_page = response.content
+    soup = BeautifulSoup(html_page, 'html.parser')
+    #new_list = soup.find_all(class_ = 'latnewslist' )
+    new_list = soup.select('a h3')
+    # info = soup.find_all(calss_={"data-cate": "newlisted"})
+    announcement_list = []
+    for latest_announcement in new_list:
+        # info = re.search(r'will list', string)
+        if re.findall(r'will list|Listing', str(latest_announcement)):
+            # print(re.findall(r"\(([^)]+)", str(latest_announcement))[0])
+            announcement_list.append(str(latest_announcement))
+    if announcement_list:
         try:
-            logger.debug(f'X-Cache: {latest_announcement.headers["X-Cache"]}')
+            logger.info(announcement_list[0])
         except KeyError:
             # No X-Cache header was found - great news, we're hitting the source.
             pass
 
-        latest_announcement = latest_announcement.json()
+
         logger.debug("Finished pulling announcement page")
-        return latest_announcement["data"]["catalogs"][0]["articles"][0]["title"]
+        return announcement_list[0]
     else:
-        logger.error(f"Error pulling binance announcement page: {latest_announcement.status_code}")
+        logger.error(f"Error pulling binance announcement page: {announcement_list}")
         return ""
+
+
 
 
 def get_kucoin_announcement():
@@ -78,6 +104,7 @@ def get_kucoin_announcement():
     letters = string.ascii_letters
     random_string = "".join(random.choice(letters) for i in range(random.randint(10, 20)))
     random_number = random.randint(1, 99999999999999999999)
+    # https://www.gate.io/articlelist/ann/0
     queries = [
         "page=1",
         f"pageSize={str(rand_page_size)}",
@@ -92,6 +119,8 @@ def get_kucoin_announcement():
         f"https://www.kucoin.com/_api/cms/articles?"
         f"?{queries[0]}&{queries[1]}&{queries[2]}&{queries[3]}&{queries[4]}&{queries[5]}"
     )
+
+    logger.info(request_url)
     latest_announcement = requests.get(request_url)
     if latest_announcement.status_code == 200:
         try:
@@ -101,6 +130,7 @@ def get_kucoin_announcement():
             pass
 
         latest_announcement = latest_announcement.json()
+        print(latest_announcement)
         logger.debug("Finished pulling announcement page")
         return latest_announcement["items"][0]["title"]
     else:
@@ -114,7 +144,6 @@ def get_last_coin():
     """
     # scan Binance Announcement
     latest_announcement = get_announcement()
-
     # enable Kucoin Announcements if True in config
     if config["TRADE_OPTIONS"]["KUCOIN_ANNOUNCEMENTS"]:
         logger.info("Kucoin announcements enabled, look for new Kucoin coins...")
@@ -124,9 +153,11 @@ def get_last_coin():
     found_coin = re.findall(r"\(([^)]+)", latest_announcement)
     uppers = None
 
+    logger.info(f'新上币{found_coin}')
+
     # returns nothing if it's an old coin or it's not an actual coin listing
     if (
-        "Will List" not in latest_announcement
+        "will list" not in latest_announcement
         or found_coin[0] == globals.latest_listing
         or found_coin[0] in previously_found_coins
     ):
@@ -178,7 +209,9 @@ def search_and_update():
             if globals.stop_threads:
                 break
         try:
+
             latest_coin = get_last_coin()
+            logger.info(latest_coin)
             if latest_coin:
                 store_new_listing(latest_coin)
             elif globals.test_mode and os.path.isfile("test_new_listing.json"):
@@ -203,6 +236,7 @@ def get_all_currencies(single=False):
         logger.info("Getting the list of supported currencies from gate io")
         all_currencies = ast.literal_eval(str(spot_api.list_currencies()))
         currency_list = [currency["currency"] for currency in all_currencies]
+        # print("222", currency_list)
         with open("currencies.json", "w") as f:
             json.dump(currency_list, f, indent=4)
             logger.info(
@@ -210,6 +244,8 @@ def get_all_currencies(single=False):
             )
         supported_currencies = currency_list
         if single:
+            # print(supported_currencies)
+
             return supported_currencies
         else:
             for x in range(300):

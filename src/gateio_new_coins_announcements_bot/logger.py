@@ -12,7 +12,7 @@ config = load_config("config.yml")
 log = logging
 
 # Set default log settings
-log_level = "INFO"
+log_level = "DEBUG"
 cwd = os.getcwd()
 log_dir = "logs"
 log_file = "bot.log"
